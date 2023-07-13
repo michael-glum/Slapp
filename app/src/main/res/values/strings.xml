@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">Slapp!</string>
+    <!-- Preference Titles -->
+    <string name="app_list_header">Select which apps to monitor</string>
+
+    <!-- App Preferences -->
+    <string name="instagram_title">Instagram</string>
+    <string name="youtube_title">YouTube</string>
+
+    <!-- Notification channels -->
+    <string name="slap_channel_name">Slap Notification Channel</string>
+    <string name="slap_channel_description">Sends a notification to remind a user not to waste time on a restricted app.</string>
+
+    <!-- Slap Copy -->
+    <string name="slap_notification_title">You\'ve been slapped!</string>
+    <string name="slap_notification_text">Get busy living or get busy dying.</string>
+
+</resources>
