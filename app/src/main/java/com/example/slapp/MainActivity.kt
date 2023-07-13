@@ -6,22 +6,38 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.preference.PreferenceManager
 import androidx.work.Data
 import androidx.work.PeriodicWorkRequest
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.example.slapp.ui.theme.SlapBlue
+import com.example.slapp.ui.theme.SlapBlue2
 import com.example.slapp.ui.theme.SlappTheme
+import com.example.slapp.ui.theme.alfaSlabOneFont
 import java.time.Duration
 
 const val CHANNEL_ID = "1"
@@ -37,7 +53,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    Greeting("Android")
+                    Greeting("Activate", R.drawable.closedfistbutton)
                 }
             }
         }
@@ -112,18 +128,57 @@ fun SharedPrefsToggle(text: String, value: Boolean, onValueChanged: (Boolean) ->
     }
 }
 
+
+
 @Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
+fun Greeting(status: String, myImage: Int) {
+
+    Column(
+        modifier = Modifier
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(SlapBlue, SlapBlue2)
+                )
+            )
+            .fillMaxSize()
+    ) {
+        Text (
+            text = "Slapp!",
+            textAlign = TextAlign.Center,
+            fontSize = 75.sp,
+            fontFamily = alfaSlabOneFont,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 100.dp, bottom = 75.dp),
+            color = Color.White,
+
+        )
+        Text (
+            text = "Tap to $status",
+            textAlign = TextAlign.Center,
+            fontSize = 25.sp,
+            fontFamily = alfaSlabOneFont,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 50.dp),
+            color = Color.White
+        )
+        Image(
+            painter = painterResource(myImage),
+            contentDescription = null,
+            alignment = Alignment.Center,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = 310.dp)
+                .clickable{}
+        )
+    }
 }
 
 @Preview(showBackground = true)
 @Composable
 fun GreetingPreview() {
     SlappTheme {
-        Greeting("Android")
+        Greeting("Android", R.drawable.closedfistbutton)
     }
 }
