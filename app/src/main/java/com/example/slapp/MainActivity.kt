@@ -1,6 +1,7 @@
 package com.example.slapp
 
 import android.app.NotificationManager
+import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -21,20 +22,32 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchColors
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.modifier.modifierLocalConsumer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import androidx.preference.PreferenceManager
 import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -45,9 +58,17 @@ import com.example.slapp.ui.theme.SlapBlue
 import com.example.slapp.ui.theme.SlapBlue2
 import com.example.slapp.ui.theme.SlappTheme
 import com.example.slapp.ui.theme.alfaSlabOneFont
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.map
 import java.time.Duration
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 const val CHANNEL_ID = "1"
+
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,6 +95,19 @@ class MainActivity : ComponentActivity() {
         val workRepeatInterval : Duration = Duration.ofMinutes(15)
         val workFlexInterval : Duration = Duration.ofMinutes(14)
         createBackgroundWorker(appsToMonitor, workRepeatInterval, workFlexInterval)
+    }
+
+    private suspend fun save(key: String, value: Boolean) {
+        val dataStoreKey = booleanPreferencesKey(key)
+        dataStore.edit {settings ->
+            settings[dataStoreKey] = value
+        }
+    }
+
+    private suspend fun read(key: String): Boolean? {
+        val dataStoreKey = booleanPreferencesKey(key)
+        val preferences = dataStore.data.first()
+        return preferences[dataStoreKey]
     }
 
     private fun getAppsToMonitor(appList: ArrayList<String>):
@@ -106,8 +140,8 @@ class MainActivity : ComponentActivity() {
 
     private fun setUpSlapNotificationChannel() {
         val notificationHandler = NotificationHandler()
-        notificationHandler.createChannel(this, getString(R.string.slap_channel_name), getString(R.string.slap_channel_description),
-            NotificationManager.IMPORTANCE_HIGH)
+        notificationHandler.createChannel(this, getString(R.string.slap_channel_name),
+            getString(R.string.slap_channel_description), NotificationManager.IMPORTANCE_HIGH)
     }
 
     private fun createBackgroundWorker(appsToMonitor: ArrayList<String>,
@@ -121,7 +155,7 @@ class MainActivity : ComponentActivity() {
 
         WorkManager
             .getInstance(applicationContext).enqueueUniquePeriodicWork("SlapWorker",
-                ExistingPeriodicWorkPolicy.UPDATE, notificationWorkRequest)
+                ExistingPeriodicWorkPolicy.KEEP, notificationWorkRequest)
     }
 }
 
@@ -144,6 +178,11 @@ private fun MyApp(modifier: Modifier = Modifier) {
 
 @Composable
 fun SettingsScreen(onCloseClicked: () -> Unit) {
+
+    val context = LocalContext.current
+
+    val scope = rememberCoroutineScope()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -153,7 +192,53 @@ fun SettingsScreen(onCloseClicked: () -> Unit) {
                 )
             )
     ){
-        MyIconButton(onCloseClicked, 633)
+        MyText(
+            text = "App Selection",
+            fontSize = 25,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 100.dp)
+
+        )
+        AppSelectionToggle(
+            text = "Instragram",
+            value = true,
+            onValueChanged = {
+                scope.launch {
+                    
+                }
+            }
+        )
+    }
+        MyIconButton(
+            onButtonClicked = onCloseClicked,
+            topPadding = 500
+        )
+}
+
+@Composable
+fun AppSelectionToggle(text: String, value: Boolean, onValueChanged: (Boolean) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 20.dp, start = 50.dp, end = 50.dp)
+    ) {
+        Text(
+            text = text,
+            fontSize = 20.sp,
+            fontFamily = alfaSlabOneFont,
+            modifier = Modifier
+                .fillMaxWidth(),
+            color = Color.White
+        )
+        Switch(
+            checked = value,
+            onCheckedChange = onValueChanged,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(end = 500.dp),
+            //colors = SwitchDefaults.colors(checkedTrackColor = SlapBlue2)
+        )
     }
 }
 
@@ -175,11 +260,15 @@ fun MyIconButton(onButtonClicked: () -> Unit, topPadding: Int) {
 }
 
 @Composable
-fun SharedPrefsToggle(text: String, value: Boolean, onValueChanged: (Boolean) -> Unit) {
-    Row {
-        Text(text)
-        Checkbox(checked = value, onCheckedChange = onValueChanged)
-    }
+fun MyText(text: String, fontSize: Int, modifier: Modifier) {
+    Text (
+        text = text,
+        textAlign = TextAlign.Center,
+        fontSize = fontSize.sp,
+        fontFamily = alfaSlabOneFont,
+        modifier = modifier,
+        color = Color.White,
+    )
 }
 
 @Composable
@@ -197,26 +286,19 @@ fun Greeting(onSettingsClicked: () -> Unit) {
             )
             .fillMaxSize()
     ) {
-        Text (
+        MyText(
             text = "Slapp!",
-            textAlign = TextAlign.Center,
-            fontSize = 75.sp,
-            fontFamily = alfaSlabOneFont,
+            fontSize = 75,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 100.dp, bottom = 75.dp),
-            color = Color.White,
-
+                .padding(top = 100.dp, bottom = 75.dp)
         )
-        Text (
+        MyText(
             text = "Tap to $status",
-            textAlign = TextAlign.Center,
-            fontSize = 25.sp,
-            fontFamily = alfaSlabOneFont,
+            fontSize = 25,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 50.dp),
-            color = Color.White
+                .padding(bottom = 50.dp)
         )
         Image(
             painter = painterResource(myImage),
@@ -226,9 +308,12 @@ fun Greeting(onSettingsClicked: () -> Unit) {
                 .fillMaxWidth()
                 .height(250.dp)
                 .padding(bottom = 100.dp)
-                .clickable{ isActive.value = !isActive.value }
+                .clickable { isActive.value = !isActive.value }
         )
-        MyIconButton(onSettingsClicked, 0)
+        MyIconButton(
+            onButtonClicked = onSettingsClicked,
+            topPadding = 0
+        )
     }
 }
 
