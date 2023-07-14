@@ -4,11 +4,17 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.CountDownTimer
+import android.os.Debug
+import android.os.Looper
+import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import java.io.Console
+import java.util.Timer
+import java.util.TimerTask
 
 class SlapWorker(appContext: Context, workerParams: WorkerParameters):
     Worker(appContext, workerParams) {
@@ -23,6 +29,7 @@ class SlapWorker(appContext: Context, workerParams: WorkerParameters):
         }
 
         // Indicate whether the work finished successfully with the Result
+
         return Result.success()
     }
 
