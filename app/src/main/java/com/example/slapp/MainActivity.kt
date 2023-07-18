@@ -85,6 +85,13 @@ class MainActivity : ComponentActivity() {
         // Get relevant installed applications
         val appList = getInstalledApplications()
 
+        // Populate settings with newly installed apps
+        for (appName in appList) {
+            if (settingsViewModel.getApp(appName) == null) {
+                settingsViewModel.saveApp(appName, true)
+            }
+        }
+
         setContent {
             SlappTheme {
                 // A surface container using the 'background' color from the theme
@@ -158,21 +165,31 @@ class MainActivity : ComponentActivity() {
 private fun MyApp(modifier: Modifier = Modifier, viewModel: SettingsDataViewModel) {
 
     val shouldShowSettings = remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    var appList: Set<Preferences.Key<*>>? = setOf()
 
     Surface(
         modifier = modifier,
         color = MaterialTheme.colorScheme.background
     ) {
         if (shouldShowSettings.value) {
-            SettingsScreen(onCloseClicked = { shouldShowSettings.value = false }, viewModel)
+            SettingsScreen(onCloseClicked = { shouldShowSettings.value = false }, viewModel,
+                appList)
         } else {
-            HomeScreen(onSettingsClicked = { shouldShowSettings.value = true })
+            HomeScreen(onSettingsClicked = {
+                scope.launch {
+                    appList = viewModel.getAppNames()
+                }
+                viewModel.getAppNames()
+                shouldShowSettings.value = true
+            })
         }
     }
 }
 
 @Composable
-fun SettingsScreen(onCloseClicked: () -> Unit, viewModel: SettingsDataViewModel) {
+fun SettingsScreen(onCloseClicked: () -> Unit, viewModel: SettingsDataViewModel,
+                   appList: Set<Preferences.Key<*>>?) {
 
     val context = LocalContext.current
 
@@ -195,21 +212,27 @@ fun SettingsScreen(onCloseClicked: () -> Unit, viewModel: SettingsDataViewModel)
                 .padding(top = 100.dp)
 
         )
-        AppSelectionToggle(
-            text = "Instragram",
-            value = true,
-            onValueChanged = {
-                scope.launch {
-                    viewModel.saveApp("Instagram", it)
-                    Log.e("The app is:", viewModel.getApp("Instagram").toString())
-                }
+        if (appList != null) {
+            for (app in appList) {
+                AppSelectionToggle(
+                    text = app.name,
+                    value = true,
+                    onValueChanged = {
+                        scope.launch {
+                            viewModel.saveApp(app.name, it)
+                            Log.e("The app is:", viewModel.getApp(app.name).toString())
+                        }
+                    }
+                )
             }
-        )
-    }
+        }
+
         MyIconButton(
             onButtonClicked = onCloseClicked,
             topPadding = 500
         )
+    }
+
 }
 
 @Composable
