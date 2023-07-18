@@ -5,8 +5,10 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -40,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.datastore.core.DataStore
@@ -58,6 +61,8 @@ import com.example.slapp.ui.theme.SlapBlue
 import com.example.slapp.ui.theme.SlapBlue2
 import com.example.slapp.ui.theme.SlappTheme
 import com.example.slapp.ui.theme.alfaSlabOneFont
+import dagger.hilt.android.AndroidEntryPoint
+import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.map
@@ -65,12 +70,15 @@ import java.time.Duration
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.io.Console
 
 const val CHANNEL_ID = "1"
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
-
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    private val settingsViewModel by viewModels<SettingsDataViewModel>()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -80,7 +88,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             SlappTheme {
                 // A surface container using the 'background' color from the theme
-                MyApp(modifier = Modifier.fillMaxSize())
+                MyApp(modifier = Modifier.fillMaxSize(), settingsViewModel)
             }
         }
 
@@ -95,19 +103,6 @@ class MainActivity : ComponentActivity() {
         val workRepeatInterval : Duration = Duration.ofMinutes(15)
         val workFlexInterval : Duration = Duration.ofMinutes(14)
         createBackgroundWorker(appsToMonitor, workRepeatInterval, workFlexInterval)
-    }
-
-    private suspend fun save(key: String, value: Boolean) {
-        val dataStoreKey = booleanPreferencesKey(key)
-        dataStore.edit {settings ->
-            settings[dataStoreKey] = value
-        }
-    }
-
-    private suspend fun read(key: String): Boolean? {
-        val dataStoreKey = booleanPreferencesKey(key)
-        val preferences = dataStore.data.first()
-        return preferences[dataStoreKey]
     }
 
     private fun getAppsToMonitor(appList: ArrayList<String>):
@@ -160,7 +155,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun MyApp(modifier: Modifier = Modifier) {
+private fun MyApp(modifier: Modifier = Modifier, viewModel: SettingsDataViewModel) {
 
     val shouldShowSettings = remember { mutableStateOf(false) }
 
@@ -169,15 +164,15 @@ private fun MyApp(modifier: Modifier = Modifier) {
         color = MaterialTheme.colorScheme.background
     ) {
         if (shouldShowSettings.value) {
-            SettingsScreen(onCloseClicked = { shouldShowSettings.value = false })
+            SettingsScreen(onCloseClicked = { shouldShowSettings.value = false }, viewModel)
         } else {
-            Greeting(onSettingsClicked = { shouldShowSettings.value = true })
+            HomeScreen(onSettingsClicked = { shouldShowSettings.value = true })
         }
     }
 }
 
 @Composable
-fun SettingsScreen(onCloseClicked: () -> Unit) {
+fun SettingsScreen(onCloseClicked: () -> Unit, viewModel: SettingsDataViewModel) {
 
     val context = LocalContext.current
 
@@ -205,7 +200,8 @@ fun SettingsScreen(onCloseClicked: () -> Unit) {
             value = true,
             onValueChanged = {
                 scope.launch {
-                    
+                    viewModel.saveApp("Instagram", it)
+                    Log.e("The app is:", viewModel.getApp("Instagram").toString())
                 }
             }
         )
@@ -272,7 +268,7 @@ fun MyText(text: String, fontSize: Int, modifier: Modifier) {
 }
 
 @Composable
-fun Greeting(onSettingsClicked: () -> Unit) {
+fun HomeScreen(onSettingsClicked: () -> Unit) {
     val isActive = remember { mutableStateOf(false) }
     val status = if (isActive.value) "Deactivate" else "Activate"
     val myImage = if (isActive.value) R.drawable.openhandbutton else R.drawable.closedfistbutton
@@ -317,10 +313,11 @@ fun Greeting(onSettingsClicked: () -> Unit) {
     }
 }
 
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    SlappTheme {
-        MyApp()
-    }
-}
+////@Preview(showBackground = true)
+//@PreviewParameter(viewModel: SettingsDataViewModel)
+//@Composable
+//fun HomeScreenPreview(viewModel: SettingsDataViewModel) {
+//    SlappTheme {
+//        MyApp(viewModel)
+//    }
+//}
