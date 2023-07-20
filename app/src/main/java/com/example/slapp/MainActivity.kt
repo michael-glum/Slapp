@@ -1,9 +1,18 @@
 package com.example.slapp
 
+import android.annotation.TargetApi
+import android.app.AppOpsManager
 import android.app.NotificationManager
+import android.content.Context
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.os.Build
 import android.os.Bundle
+import android.os.Process
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -13,11 +22,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -34,6 +45,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -50,9 +63,10 @@ import com.example.slapp.ui.theme.SlappTheme
 import com.example.slapp.ui.theme.alfaSlabOneFont
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
-import java.time.Duration
 import kotlinx.coroutines.launch
+import java.time.Duration
 import kotlin.reflect.KFunction4
+
 
 const val CHANNEL_ID = "1"
 
@@ -63,6 +77,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        requestUsageStatsPermission()
 
         // Get relevant installed applications
         val installedAppList = getInstalledApplications()
@@ -87,7 +103,8 @@ class MainActivity : ComponentActivity() {
                 // A surface container using the 'background' color from the theme
                 MyApp(
                     modifier = Modifier.fillMaxSize(), settingsViewModel, ::createBackgroundWorker,
-                installedAppList, workRepeatInterval, workFlexInterval, ::killBackgroundWorker)
+                installedAppList, workRepeatInterval, workFlexInterval, ::killBackgroundWorker,
+                ::getImageFromPackageName, ::getAppNameFromPackageName)
             }
         }
     }
@@ -149,20 +166,53 @@ class MainActivity : ComponentActivity() {
         Log.e("Its off", "Its OFF!")
         WorkManager.getInstance(applicationContext).cancelAllWork()
     }
+
+    private fun getImageFromPackageName(packageName: String): ImageBitmap {
+        val drawable = packageManager.getApplicationIcon(packageName)
+        val bitMap = Bitmap.createBitmap(drawable.intrinsicWidth, drawable.intrinsicHeight,
+            Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitMap)
+        drawable.setBounds(0, 0, canvas.width, canvas.height)
+        drawable.draw(canvas)
+
+        return bitMap.asImageBitmap()
+    }
+
+    private fun getAppNameFromPackageName(packageName: String): String {
+        return packageManager.getApplicationLabel(packageManager.getApplicationInfo(packageName,
+            PackageManager.ApplicationInfoFlags.of(0))).toString()
+    }
+
+    private fun requestUsageStatsPermission() {
+        if (!hasUsageStatsPermission(this)
+        ) {
+            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+        }
+    }
+
+    private fun hasUsageStatsPermission(context: Context): Boolean {
+        val appOps =
+            context.getSystemService(ComponentActivity.APP_OPS_SERVICE) as AppOpsManager
+        val mode = appOps.unsafeCheckOpNoThrow(
+            "android:get_usage_stats",
+            Process.myUid(), context.packageName
+        )
+        return mode == AppOpsManager.MODE_ALLOWED
+    }
 }
 
 @Composable
 private fun MyApp(
     modifier: Modifier = Modifier,
     viewModel: SettingsDataViewModel,
-    createBackgroundWorker: KFunction4<ArrayList<String>, Duration, Duration,
-            ExistingPeriodicWorkPolicy, Unit>,
+    createBackgroundWorker: KFunction4<ArrayList<String>, Duration, Duration, ExistingPeriodicWorkPolicy, Unit>,
     installedAppList: ArrayList<String>,
     workRepeatInterval: Duration,
     workFlexInterval: Duration,
     killBackgroundWorker: () -> Unit,
+    getImageFromPackageName: (String) -> ImageBitmap,
+    getAppNameFromPackageName: (String) -> String,
 ) {
-
     val shouldShowSettings = remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var savedAppList: Set<Preferences.Key<*>>? = setOf()
@@ -175,7 +225,7 @@ private fun MyApp(
             SettingsScreen(
                 onCloseClicked = {
                 shouldShowSettings.value = false
-            }, viewModel, savedAppList)
+            }, viewModel, savedAppList, getImageFromPackageName, getAppNameFromPackageName)
         } else {
             HomeScreen(
                 onSettingsClicked = {
@@ -184,7 +234,8 @@ private fun MyApp(
                 }
                 shouldShowSettings.value = true
             }, viewModel, createBackgroundWorker, installedAppList, workRepeatInterval,
-                workFlexInterval, killBackgroundWorker)
+                workFlexInterval, killBackgroundWorker,
+                startingValue = viewModel.getApp("isActive") == true)
         }
     }
 }
@@ -192,7 +243,9 @@ private fun MyApp(
 @Composable
 fun SettingsScreen(
     onCloseClicked: () -> Unit, viewModel: SettingsDataViewModel,
-    savedAppList: Set<Preferences.Key<*>>?
+    savedAppList: Set<Preferences.Key<*>>?,
+    getImageFromPackageName: (String) -> ImageBitmap,
+    getAppNameFromPackageName: (String) -> String
 ) {
 
     val scope = rememberCoroutineScope()
@@ -216,17 +269,23 @@ fun SettingsScreen(
                     fontSize = 25,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 100.dp)
+                        .padding(top = 130.dp, bottom = 30.dp)
                 )
             }
             if (savedAppList != null) {
                 for (app in savedAppList) {
                     if (app.name != "isActive") {
+                        val appIcon = getImageFromPackageName(app.name)
+                        val appName = getAppNameFromPackageName(app.name)
+
                         item {
                             AppSelectionToggle(
+                                appName,
+                                appIcon,
                                 app.name,
                                 viewModel,
-                                scope
+                                scope,
+                                startingValue = viewModel.getApp(app.name) == true
                             )
                         }
                     }
@@ -243,36 +302,53 @@ fun SettingsScreen(
 @Composable
 fun AppSelectionToggle(
     appName: String,
+    appIcon: ImageBitmap,
+    packageName: String,
     viewModel: SettingsDataViewModel,
     scope: CoroutineScope,
+    startingValue: Boolean
 ) {
 
-    val isAppActive = remember { mutableStateOf(true) }
+    val isAppActive = remember { mutableStateOf(startingValue) }
 
     Row(
-        Modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 20.dp, start = 50.dp, end = 50.dp)
+            .padding(top = 20.dp, start = 50.dp, end = 50.dp),
+        verticalAlignment = Alignment.CenterVertically
+
     ) {
+        Image(
+            appIcon,
+            contentDescription = null,
+            modifier = Modifier
+                .padding(end = 30.dp)
+                .width(60.dp)
+                .height(60.dp)
+        )
+
         Text(
             text = appName,
             fontSize = 20.sp,
             fontFamily = alfaSlabOneFont,
             modifier = Modifier
-                .padding(end = 50.dp),
+                .padding(end = 50.dp)
+                .fillMaxHeight(),
             color = Color.White
         )
 
-        LaunchedEffect(viewModel) {
-            isAppActive.value = viewModel.getApp(appName) == true
-        }
+//        LaunchedEffect(viewModel) {
+//            isAppActive.value = viewModel.getApp(packageName) == true
+//        }
 
         Switch(
             checked = isAppActive.value,
-            modifier = Modifier.padding(end = 50.dp),
+            modifier = Modifier
+                .padding(end = 30.dp, top = 10.dp)
+                .fillMaxHeight(),
             onCheckedChange = {
                 scope.launch {
-                    viewModel.saveApp(appName, !isAppActive.value)
+                    viewModel.saveApp(packageName, !isAppActive.value)
                     isAppActive.value = !isAppActive.value
                     // Make back button "Apply" so application of changes is done by returning to the home screen
                 }
@@ -319,9 +395,10 @@ fun HomeScreen(
     installedAppList: ArrayList<String>,
     workRepeatInterval: Duration,
     workFlexInterval: Duration,
-    killBackgroundWorker: () -> Unit
+    killBackgroundWorker: () -> Unit,
+    startingValue: Boolean
 ) {
-    val isActive = remember { mutableStateOf(false) }
+    val isActive = remember { mutableStateOf(startingValue) }
     val status = if (isActive.value) "Deactivate" else "Activate"
     val myImage = if (isActive.value) R.drawable.openhandbutton else R.drawable.closedfistbutton
 
@@ -352,7 +429,7 @@ fun HomeScreen(
         )
 
         LaunchedEffect(viewModel) {
-            isActive.value = viewModel.getApp("isActive") == true
+            //isActive.value = viewModel.getApp("isActive") == true
             if (isActive.value) {
                 createBackgroundWorker(installedAppList, workRepeatInterval, workFlexInterval,
                     ExistingPeriodicWorkPolicy.UPDATE)
@@ -374,8 +451,10 @@ fun HomeScreen(
                         viewModel.saveApp("isActive", !isActive.value)
                         isActive.value = !isActive.value
                         if (isActive.value) {
-                            createBackgroundWorker(installedAppList, workRepeatInterval,
-                                workFlexInterval, ExistingPeriodicWorkPolicy.UPDATE)
+                            createBackgroundWorker(
+                                installedAppList, workRepeatInterval,
+                                workFlexInterval, ExistingPeriodicWorkPolicy.UPDATE
+                            )
                         } else {
                             killBackgroundWorker()
                         }
