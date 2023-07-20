@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.CountDownTimer
+import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -25,7 +26,6 @@ class SlapWorker(appContext: Context, workerParams: WorkerParameters):
         }
 
         // Indicate whether the work finished successfully with the Result
-
         return Result.success()
     }
 
@@ -38,20 +38,21 @@ class SlapWorker(appContext: Context, workerParams: WorkerParameters):
 
     private fun isWastingTime(appsToMonitor: List<String>, fad: ForegroundAppDetector,
                               timeUntilSlap: Long): Boolean {
-        val foregroundApp = fad.getForegroundApp(applicationContext)
+        val foregroundApp = fad.getForegroundApp(applicationContext, appsToMonitor)
         var isWastingTime = false
 
         if (foregroundApp in appsToMonitor) {
-            object: CountDownTimer(timeUntilSlap, 5000){
-                override fun onTick(p0: Long) {
-                    if (foregroundApp != fad.getForegroundApp(applicationContext)) {
-                        return
-                    }
-                }
-                override fun onFinish() {
-                    isWastingTime = true
-                }
-            }.start()
+//            object: CountDownTimer(timeUntilSlap, 5000){
+//                override fun onTick(p0: Long) {
+//                    if (foregroundApp != fad.getForegroundApp(applicationContext, appsToMonitor)) {
+//                        return
+//                    }
+//                }
+//                override fun onFinish() {
+//                    isWastingTime = true
+//                }
+//            }.start()
+            isWastingTime = true
         }
         return isWastingTime
     }
@@ -64,6 +65,7 @@ class SlapWorker(appContext: Context, workerParams: WorkerParameters):
         val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(text)
+            .setSmallIcon(R.drawable.openhandbutton)
 
         with(NotificationManagerCompat.from(applicationContext)) {
             if (ActivityCompat.checkSelfPermission(

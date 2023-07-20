@@ -39,7 +39,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.datastore.preferences.core.Preferences
-import androidx.preference.PreferenceManager
 import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequest
@@ -50,9 +49,10 @@ import com.example.slapp.ui.theme.SlapBlue2
 import com.example.slapp.ui.theme.SlappTheme
 import com.example.slapp.ui.theme.alfaSlabOneFont
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
 import java.time.Duration
 import kotlinx.coroutines.launch
-import kotlin.reflect.KFunction3
+import kotlin.reflect.KFunction4
 
 const val CHANNEL_ID = "1"
 
@@ -65,10 +65,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         // Get relevant installed applications
-        val appList = getInstalledApplications()
+        val installedAppList = getInstalledApplications()
 
         // Populate settings with newly installed apps
-        for (appName in appList) {
+        for (appName in installedAppList) {
             if (settingsViewModel.getApp(appName) == null) {
                 settingsViewModel.saveApp(appName, true)
             }
@@ -76,9 +76,6 @@ class MainActivity : ComponentActivity() {
 
         // Create notification channel to send slaps.
         setUpSlapNotificationChannel()
-
-        // Determine which apps should be monitored
-        val appsToMonitor = getAppsToMonitor(appList)
 
         // Create worker to monitor restricted apps and send slap notifications, even after the
         // app is closed
@@ -90,18 +87,17 @@ class MainActivity : ComponentActivity() {
                 // A surface container using the 'background' color from the theme
                 MyApp(
                     modifier = Modifier.fillMaxSize(), settingsViewModel, ::createBackgroundWorker,
-                appsToMonitor, workRepeatInterval, workFlexInterval, ::killBackgroundWorker)
+                installedAppList, workRepeatInterval, workFlexInterval, ::killBackgroundWorker)
             }
         }
     }
 
     private fun getAppsToMonitor(appList: ArrayList<String>):
             ArrayList<String> {
-        val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
         val appsToMonitor = arrayListOf<String>()
-        for (i in appList) {
-            if (sharedPreferences.getBoolean(i, false)) {
-                appsToMonitor.add(i)
+        for (appName in appList) {
+            if (appName != "isActive" && settingsViewModel.getApp(appName) == true) {
+                appsToMonitor.add(appName)
             }
         }
         return appsToMonitor
@@ -129,9 +125,14 @@ class MainActivity : ComponentActivity() {
             getString(R.string.slap_channel_description), NotificationManager.IMPORTANCE_HIGH)
     }
 
-    private fun createBackgroundWorker(appsToMonitor: ArrayList<String>,
-                                       workRepeatInterval: Duration, workFlexInterval: Duration) {
+    private fun createBackgroundWorker(installedAppList: ArrayList<String>,
+                                       workRepeatInterval: Duration, workFlexInterval: Duration,
+                                       existingPeriodicWorkPolicy: ExistingPeriodicWorkPolicy) {
         Log.e("Its on", "Its ON!")
+        val appsToMonitor = getAppsToMonitor(installedAppList)
+        for (i in appsToMonitor) {
+            Log.e("My apps", i)
+        }
         val data = Data.Builder()
         data.putStringArray("appsToMonitor", appsToMonitor.toTypedArray())
 
@@ -141,7 +142,7 @@ class MainActivity : ComponentActivity() {
 
         WorkManager
             .getInstance(applicationContext).enqueueUniquePeriodicWork("SlapWorker",
-                ExistingPeriodicWorkPolicy.KEEP, notificationWorkRequest)
+                existingPeriodicWorkPolicy, notificationWorkRequest)
     }
 
     private fun killBackgroundWorker() {
@@ -154,8 +155,9 @@ class MainActivity : ComponentActivity() {
 private fun MyApp(
     modifier: Modifier = Modifier,
     viewModel: SettingsDataViewModel,
-    createBackgroundWorker: KFunction3<ArrayList<String>, Duration, Duration, Unit>,
-    appsToMonitor: ArrayList<String>,
+    createBackgroundWorker: KFunction4<ArrayList<String>, Duration, Duration,
+            ExistingPeriodicWorkPolicy, Unit>,
+    installedAppList: ArrayList<String>,
     workRepeatInterval: Duration,
     workFlexInterval: Duration,
     killBackgroundWorker: () -> Unit,
@@ -163,32 +165,35 @@ private fun MyApp(
 
     val shouldShowSettings = remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    var appList: Set<Preferences.Key<*>>? = setOf()
+    var savedAppList: Set<Preferences.Key<*>>? = setOf()
 
     Surface(
         modifier = modifier,
         color = MaterialTheme.colorScheme.background
     ) {
         if (shouldShowSettings.value) {
-            SettingsScreen(onCloseClicked = {
+            SettingsScreen(
+                onCloseClicked = {
                 shouldShowSettings.value = false
-            }, viewModel, appList)
+            }, viewModel, savedAppList)
         } else {
             HomeScreen(
                 onSettingsClicked = {
                 scope.launch {
-                    appList = viewModel.getAppNames()
+                    savedAppList = viewModel.getAppNames()
                 }
                 shouldShowSettings.value = true
-            }, viewModel, createBackgroundWorker, appsToMonitor, workRepeatInterval,
+            }, viewModel, createBackgroundWorker, installedAppList, workRepeatInterval,
                 workFlexInterval, killBackgroundWorker)
         }
     }
 }
 
 @Composable
-fun SettingsScreen(onCloseClicked: () -> Unit, viewModel: SettingsDataViewModel,
-                   appList: Set<Preferences.Key<*>>?) {
+fun SettingsScreen(
+    onCloseClicked: () -> Unit, viewModel: SettingsDataViewModel,
+    savedAppList: Set<Preferences.Key<*>>?
+) {
 
     val scope = rememberCoroutineScope()
 
@@ -214,20 +219,14 @@ fun SettingsScreen(onCloseClicked: () -> Unit, viewModel: SettingsDataViewModel,
                         .padding(top = 100.dp)
                 )
             }
-            if (appList != null) {
-                for (app in appList) {
+            if (savedAppList != null) {
+                for (app in savedAppList) {
                     if (app.name != "isActive") {
                         item {
                             AppSelectionToggle(
-                                text = app.name,
-                                value = true,
-                                onValueChanged = {
-                                    scope.launch {
-                                        viewModel.saveApp(app.name, it)
-                                        Log.e("The app is:", viewModel.getApp(app.name)
-                                            .toString())
-                                    }
-                                }
+                                app.name,
+                                viewModel,
+                                scope
                             )
                         }
                     }
@@ -242,26 +241,42 @@ fun SettingsScreen(onCloseClicked: () -> Unit, viewModel: SettingsDataViewModel,
 }
 
 @Composable
-fun AppSelectionToggle(text: String, value: Boolean, onValueChanged: (Boolean) -> Unit) {
+fun AppSelectionToggle(
+    appName: String,
+    viewModel: SettingsDataViewModel,
+    scope: CoroutineScope,
+) {
+
+    val isAppActive = remember { mutableStateOf(true) }
+
     Row(
         Modifier
             .fillMaxWidth()
             .padding(top = 20.dp, start = 50.dp, end = 50.dp)
     ) {
         Text(
-            text = text,
+            text = appName,
             fontSize = 20.sp,
             fontFamily = alfaSlabOneFont,
             modifier = Modifier
                 .padding(end = 50.dp),
             color = Color.White
         )
+
+        LaunchedEffect(viewModel) {
+            isAppActive.value = viewModel.getApp(appName) == true
+        }
+
         Switch(
-            checked = value,
-            onCheckedChange = onValueChanged,
-            modifier = Modifier
-//                .fillMaxWidth()
-                .padding(end = 50.dp),
+            checked = isAppActive.value,
+            modifier = Modifier.padding(end = 50.dp),
+            onCheckedChange = {
+                scope.launch {
+                    viewModel.saveApp(appName, !isAppActive.value)
+                    isAppActive.value = !isAppActive.value
+                    // Make back button "Apply" so application of changes is done by returning to the home screen
+                }
+            }
             //colors = SwitchDefaults.colors(checkedTrackColor = SlapBlue2)
         )
     }
@@ -300,8 +315,8 @@ fun MyText(text: String, fontSize: Int, modifier: Modifier) {
 fun HomeScreen(
     onSettingsClicked: () -> Unit,
     viewModel: SettingsDataViewModel,
-    createBackgroundWorker: KFunction3<ArrayList<String>, Duration, Duration, Unit>,
-    appsToMonitor: ArrayList<String>,
+    createBackgroundWorker: KFunction4<ArrayList<String>, Duration, Duration, ExistingPeriodicWorkPolicy, Unit>,
+    installedAppList: ArrayList<String>,
     workRepeatInterval: Duration,
     workFlexInterval: Duration,
     killBackgroundWorker: () -> Unit
@@ -339,7 +354,8 @@ fun HomeScreen(
         LaunchedEffect(viewModel) {
             isActive.value = viewModel.getApp("isActive") == true
             if (isActive.value) {
-                createBackgroundWorker(appsToMonitor, workRepeatInterval, workFlexInterval)
+                createBackgroundWorker(installedAppList, workRepeatInterval, workFlexInterval,
+                    ExistingPeriodicWorkPolicy.UPDATE)
             } else {
                 killBackgroundWorker()
             }
@@ -358,7 +374,8 @@ fun HomeScreen(
                         viewModel.saveApp("isActive", !isActive.value)
                         isActive.value = !isActive.value
                         if (isActive.value) {
-                            createBackgroundWorker(appsToMonitor, workRepeatInterval, workFlexInterval)
+                            createBackgroundWorker(installedAppList, workRepeatInterval,
+                                workFlexInterval, ExistingPeriodicWorkPolicy.UPDATE)
                         } else {
                             killBackgroundWorker()
                         }
