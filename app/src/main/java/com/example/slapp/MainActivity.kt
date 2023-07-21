@@ -35,6 +35,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -60,6 +61,8 @@ import androidx.work.WorkManager
 import com.example.slapp.ui.theme.SlapBlue
 import com.example.slapp.ui.theme.SlapBlue2
 import com.example.slapp.ui.theme.SlappTheme
+import com.example.slapp.ui.theme.SliderBLue
+import com.example.slapp.ui.theme.White
 import com.example.slapp.ui.theme.alfaSlabOneFont
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -322,7 +325,7 @@ fun AppSelectionToggle(
             appIcon,
             contentDescription = null,
             modifier = Modifier
-                .padding(end = 30.dp)
+                .padding(end = 42.dp)
                 .width(60.dp)
                 .height(60.dp)
         )
@@ -332,7 +335,8 @@ fun AppSelectionToggle(
             fontSize = 20.sp,
             fontFamily = alfaSlabOneFont,
             modifier = Modifier
-                .padding(end = 50.dp)
+                .width(180.dp)
+                .padding(end = 42.dp)
                 .fillMaxHeight(),
             color = Color.White
         )
@@ -352,8 +356,8 @@ fun AppSelectionToggle(
                     isAppActive.value = !isAppActive.value
                     // Make back button "Apply" so application of changes is done by returning to the home screen
                 }
-            }
-            //colors = SwitchDefaults.colors(checkedTrackColor = SlapBlue2)
+            },
+            colors = SwitchDefaults.colors(checkedTrackColor = SliderBLue)
         )
     }
 }

@@ -3,6 +3,8 @@ package com.example.slapp
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
+import android.graphics.drawable.BitmapDrawable
 import android.os.CountDownTimer
 import android.util.Log
 import androidx.core.app.ActivityCompat
@@ -66,6 +68,13 @@ class SlapWorker(appContext: Context, workerParams: WorkerParameters):
             .setContentTitle(title)
             .setContentText(text)
             .setSmallIcon(R.drawable.openhandbutton)
+            .setLargeIcon(
+                BitmapFactory.decodeResource(applicationContext.resources,
+                R.drawable.heart))
+            .setAutoCancel(false)
+            .setColor(applicationContext.getColor(R.color.slap_blue))
+            .setColorized(true)
+            //.setStyle(NotificationCompat.DecoratedCustomViewStyle())
 
         with(NotificationManagerCompat.from(applicationContext)) {
             if (ActivityCompat.checkSelfPermission(
