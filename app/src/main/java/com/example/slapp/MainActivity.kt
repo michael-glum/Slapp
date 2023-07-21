@@ -297,7 +297,9 @@ fun SettingsScreen(
         }
         MyIconButton(
             onButtonClicked = onCloseClicked,
-            topPadding = 40
+            topPadding = 40,
+            icon = R.drawable.applybutton,
+            modifier = Modifier.size(size = 100.dp)
         )
     }
 }
@@ -363,7 +365,7 @@ fun AppSelectionToggle(
 }
 
 @Composable
-fun MyIconButton(onButtonClicked: () -> Unit, topPadding: Int) {
+fun MyIconButton(onButtonClicked: () -> Unit, topPadding: Int, icon: Int, modifier: Modifier) {
     IconButton(
         modifier = Modifier
             .fillMaxWidth()
@@ -371,9 +373,9 @@ fun MyIconButton(onButtonClicked: () -> Unit, topPadding: Int) {
         onClick = onButtonClicked
     ) {
         Icon(
-            painter = painterResource(R.drawable.settingsbutton),
+            painter = painterResource(icon),
             contentDescription = null,
-            modifier = Modifier.size(size = 45.dp),
+            modifier = modifier,
             tint = Color.White
         )
     }
@@ -467,7 +469,9 @@ fun HomeScreen(
         )
         MyIconButton(
             onButtonClicked = onSettingsClicked,
-            topPadding = 0
+            topPadding = 0,
+            icon = R.drawable.settingsbutton,
+            modifier = Modifier.size(size = 45.dp)
         )
     }
 }
