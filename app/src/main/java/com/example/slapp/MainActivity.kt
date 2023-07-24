@@ -1,6 +1,6 @@
 package com.example.slapp
 
-import android.annotation.TargetApi
+import android.Manifest
 import android.app.AppOpsManager
 import android.app.NotificationManager
 import android.content.Context
@@ -9,13 +9,14 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.provider.Settings
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -48,10 +49,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
 import androidx.datastore.preferences.core.Preferences
 import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -62,8 +65,6 @@ import com.example.slapp.ui.theme.SlapBlue
 import com.example.slapp.ui.theme.SlapBlue2
 import com.example.slapp.ui.theme.SlappTheme
 import com.example.slapp.ui.theme.SliderBLue
-import com.example.slapp.ui.theme.White
-import com.example.slapp.ui.theme.alfaSlabOneFont
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -78,10 +79,12 @@ class MainActivity : ComponentActivity() {
 
     private val settingsViewModel by viewModels<SettingsDataViewModel>()
 
+    val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {}
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        requestUsageStatsPermission()
 
         // Get relevant installed applications
         val installedAppList = getInstalledApplications()
@@ -96,8 +99,6 @@ class MainActivity : ComponentActivity() {
         // Create notification channel to send slaps.
         setUpSlapNotificationChannel()
 
-        // Create worker to monitor restricted apps and send slap notifications, even after the
-        // app is closed
         val workRepeatInterval: Duration = Duration.ofMinutes(15)
         val workFlexInterval: Duration = Duration.ofMinutes(14)
 
@@ -107,7 +108,8 @@ class MainActivity : ComponentActivity() {
                 MyApp(
                     modifier = Modifier.fillMaxSize(), settingsViewModel, ::createBackgroundWorker,
                 installedAppList, workRepeatInterval, workFlexInterval, ::killBackgroundWorker,
-                ::getImageFromPackageName, ::getAppNameFromPackageName)
+                ::getImageFromPackageName, ::getAppNameFromPackageName,
+                    ::requestUsageStatsPermission, ::requestNotificationPermission)
             }
         }
     }
@@ -145,9 +147,12 @@ class MainActivity : ComponentActivity() {
             getString(R.string.slap_channel_description), NotificationManager.IMPORTANCE_HIGH)
     }
 
+    // Create worker to monitor restricted apps and send slap notifications, even after the
+    // app is closed
     private fun createBackgroundWorker(installedAppList: ArrayList<String>,
                                        workRepeatInterval: Duration, workFlexInterval: Duration,
                                        existingPeriodicWorkPolicy: ExistingPeriodicWorkPolicy) {
+        requestNotificationPermission()
         Log.e("Its on", "Its ON!")
         val appsToMonitor = getAppsToMonitor(installedAppList)
         for (i in appsToMonitor) {
@@ -155,16 +160,17 @@ class MainActivity : ComponentActivity() {
         }
         val data = Data.Builder()
         data.putStringArray("appsToMonitor", appsToMonitor.toTypedArray())
-
         val notificationWorkRequest: PeriodicWorkRequest =
             PeriodicWorkRequestBuilder<SlapWorker>(workRepeatInterval, workFlexInterval)
                 .setInputData(data.build()).build()
-
         WorkManager
-            .getInstance(applicationContext).enqueueUniquePeriodicWork("SlapWorker",
-                existingPeriodicWorkPolicy, notificationWorkRequest)
+            .getInstance(applicationContext).enqueueUniquePeriodicWork(
+                "SlapWorker",
+                existingPeriodicWorkPolicy, notificationWorkRequest
+            )
     }
 
+    // Cancel all background workers
     private fun killBackgroundWorker() {
         Log.e("Its off", "Its OFF!")
         WorkManager.getInstance(applicationContext).cancelAllWork()
@@ -186,16 +192,40 @@ class MainActivity : ComponentActivity() {
             PackageManager.ApplicationInfoFlags.of(0))).toString()
     }
 
-    private fun requestUsageStatsPermission() {
-        if (!hasUsageStatsPermission(this)
+    private fun requestUsageStatsPermission(): Boolean {
+        return if (!hasUsageStatsPermission(this)
         ) {
+            Toast.makeText(applicationContext, "Slapp! requires usage access permissions."
+                , Toast.LENGTH_LONG).show()
             startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+            // Below statement provides the return value
+            hasUsageStatsPermission(this)
+        } else {
+            true
+        }
+    }
+
+    private fun requestNotificationPermission(): Boolean {
+        return if (ActivityCompat.checkSelfPermission(
+                applicationContext,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            Toast.makeText(applicationContext, "Slapp! requires notification permissions."
+                , Toast.LENGTH_LONG).show()
+            requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            // Below statement provides the return value
+            ActivityCompat.checkSelfPermission(
+                applicationContext,
+                Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
         }
     }
 
     private fun hasUsageStatsPermission(context: Context): Boolean {
         val appOps =
-            context.getSystemService(ComponentActivity.APP_OPS_SERVICE) as AppOpsManager
+            context.getSystemService(APP_OPS_SERVICE) as AppOpsManager
         val mode = appOps.unsafeCheckOpNoThrow(
             "android:get_usage_stats",
             Process.myUid(), context.packageName
@@ -215,6 +245,8 @@ private fun MyApp(
     killBackgroundWorker: () -> Unit,
     getImageFromPackageName: (String) -> ImageBitmap,
     getAppNameFromPackageName: (String) -> String,
+    requestUsageStatsPermission: () -> Boolean,
+    requestNotificationPermission: () -> Boolean
 ) {
     val shouldShowSettings = remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -238,7 +270,8 @@ private fun MyApp(
                 shouldShowSettings.value = true
             }, viewModel, createBackgroundWorker, installedAppList, workRepeatInterval,
                 workFlexInterval, killBackgroundWorker,
-                startingValue = viewModel.getApp("isActive") == true)
+                startingValue = viewModel.getApp("isActive") == true,
+                requestUsageStatsPermission, requestNotificationPermission)
         }
     }
 }
@@ -335,17 +368,12 @@ fun AppSelectionToggle(
         Text(
             text = appName,
             fontSize = 20.sp,
-            fontFamily = alfaSlabOneFont,
             modifier = Modifier
                 .width(180.dp)
                 .padding(end = 42.dp)
                 .fillMaxHeight(),
             color = Color.White
         )
-
-//        LaunchedEffect(viewModel) {
-//            isAppActive.value = viewModel.getApp(packageName) == true
-//        }
 
         Switch(
             checked = isAppActive.value,
@@ -356,7 +384,6 @@ fun AppSelectionToggle(
                 scope.launch {
                     viewModel.saveApp(packageName, !isAppActive.value)
                     isAppActive.value = !isAppActive.value
-                    // Make back button "Apply" so application of changes is done by returning to the home screen
                 }
             },
             colors = SwitchDefaults.colors(checkedTrackColor = SliderBLue)
@@ -387,7 +414,6 @@ fun MyText(text: String, fontSize: Int, modifier: Modifier) {
         text = text,
         textAlign = TextAlign.Center,
         fontSize = fontSize.sp,
-        fontFamily = alfaSlabOneFont,
         modifier = modifier,
         color = Color.White,
     )
@@ -402,13 +428,15 @@ fun HomeScreen(
     workRepeatInterval: Duration,
     workFlexInterval: Duration,
     killBackgroundWorker: () -> Unit,
-    startingValue: Boolean
+    startingValue: Boolean,
+    requestUsageStatsPermission: () -> Boolean,
+    requestNotificationPermission: () -> Boolean
 ) {
     val isActive = remember { mutableStateOf(startingValue) }
     val status = if (isActive.value) "Deactivate" else "Activate"
     val myImage = if (isActive.value) R.drawable.openhandbutton else R.drawable.closedfistbutton
-
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -435,12 +463,17 @@ fun HomeScreen(
         )
 
         LaunchedEffect(viewModel) {
-            //isActive.value = viewModel.getApp("isActive") == true
-            if (isActive.value) {
-                createBackgroundWorker(installedAppList, workRepeatInterval, workFlexInterval,
-                    ExistingPeriodicWorkPolicy.UPDATE)
+            if (requestNotificationPermission() && requestUsageStatsPermission()) {
+                if (isActive.value) {
+                    createBackgroundWorker(
+                        installedAppList, workRepeatInterval, workFlexInterval,
+                        ExistingPeriodicWorkPolicy.UPDATE
+                    )
+                } else {
+                    killBackgroundWorker()
+                }
             } else {
-                killBackgroundWorker()
+                isActive.value = false
             }
         }
 
@@ -454,15 +487,17 @@ fun HomeScreen(
                 .padding(bottom = 100.dp)
                 .clickable {
                     scope.launch {
-                        viewModel.saveApp("isActive", !isActive.value)
-                        isActive.value = !isActive.value
-                        if (isActive.value) {
-                            createBackgroundWorker(
-                                installedAppList, workRepeatInterval,
-                                workFlexInterval, ExistingPeriodicWorkPolicy.UPDATE
-                            )
-                        } else {
-                            killBackgroundWorker()
+                        if (requestUsageStatsPermission() && requestNotificationPermission()) {
+                            viewModel.saveApp("isActive", !isActive.value)
+                            isActive.value = !isActive.value
+                            if (isActive.value) {
+                                createBackgroundWorker(
+                                    installedAppList, workRepeatInterval,
+                                    workFlexInterval, ExistingPeriodicWorkPolicy.UPDATE
+                                )
+                            } else {
+                                killBackgroundWorker()
+                            }
                         }
                     }
                 }
@@ -475,6 +510,8 @@ fun HomeScreen(
         )
     }
 }
+
+
 
 ////@Preview(showBackground = true)
 //@PreviewParameter(viewModel: SettingsDataViewModel)

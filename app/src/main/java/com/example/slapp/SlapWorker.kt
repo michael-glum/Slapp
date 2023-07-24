@@ -44,26 +44,17 @@ class SlapWorker(appContext: Context, workerParams: WorkerParameters):
         var isWastingTime = false
 
         if (foregroundApp in appsToMonitor) {
-//            object: CountDownTimer(timeUntilSlap, 5000){
-//                override fun onTick(p0: Long) {
-//                    if (foregroundApp != fad.getForegroundApp(applicationContext, appsToMonitor)) {
-//                        return
-//                    }
-//                }
-//                override fun onFinish() {
-//                    isWastingTime = true
-//                }
-//            }.start()
             isWastingTime = true
         }
         return isWastingTime
     }
 
     private fun sendSlapNotification() {
-        val notificationID = 0 // this probably doesn't belong here
+        val notificationID = 0
         val title = applicationContext.getString(R.string.slap_notification_title)
         val text = applicationContext.getString(R.string.slap_notification_text)
 
+        // Build notification
         val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(text)
@@ -74,8 +65,8 @@ class SlapWorker(appContext: Context, workerParams: WorkerParameters):
             .setAutoCancel(false)
             .setColor(applicationContext.getColor(R.color.slap_blue))
             .setColorized(true)
-            //.setStyle(NotificationCompat.DecoratedCustomViewStyle())
 
+        // Send notification (if it has the correct permissions)
         with(NotificationManagerCompat.from(applicationContext)) {
             if (ActivityCompat.checkSelfPermission(
                     applicationContext,
@@ -94,15 +85,4 @@ class SlapWorker(appContext: Context, workerParams: WorkerParameters):
             notify(notificationID, builder.build())
         }
     }
-
-
-    /* This doesn't belong here. Alternative: android.permission.QUERY_ALL_PACKAGES
-    private fun isPackageInstalled(packageName: String, packageManager: PackageManager): Boolean {
-        return try {
-            packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
-            true
-        } catch (e: PackageManager.NameNotFoundException) {
-            false
-        }
-    } */
 }

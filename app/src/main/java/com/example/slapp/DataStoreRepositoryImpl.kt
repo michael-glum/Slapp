@@ -26,11 +26,9 @@ class DataStoreRepositoryImpl @Inject constructor(
     }
 
     override suspend fun read(key: String): Boolean? {
-        //context.dataStore.edit{it.clear()}
         val dataStoreKey = booleanPreferencesKey(key)
         val preferences = context.dataStore.data.first()
         return preferences[dataStoreKey]
-        //return true
     }
 
     override suspend fun getAppNames(): Set<Preferences.Key<*>>? {
