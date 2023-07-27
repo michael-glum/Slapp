@@ -86,6 +86,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        if (intent.getBooleanExtra("EXIT", false)) {
+            finish()
+        }
+
         // Get relevant installed applications
         val installedAppList = getInstalledApplications()
 
@@ -332,7 +336,7 @@ fun SettingsScreen(
             onButtonClicked = onCloseClicked,
             topPadding = 40,
             icon = R.drawable.applybutton,
-            modifier = Modifier.size(size = 100.dp)
+            modifier = Modifier.size(size = 140.dp)
         )
     }
 }
@@ -436,7 +440,6 @@ fun HomeScreen(
     val status = if (isActive.value) "Deactivate" else "Activate"
     val myImage = if (isActive.value) R.drawable.openhandbutton else R.drawable.closedfistbutton
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
 
     Column(
         modifier = Modifier
